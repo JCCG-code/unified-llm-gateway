@@ -3,18 +3,18 @@ from datetime import datetime
 from typing import Annotated
 
 
-# Checks a valid temperature
-def valid_temperature(value: float) -> float:
-    if value < 0 or value > 2:
-        raise ValueError("No es una temperatura valida")
-    return value
-
-
 # Model configuration interface
 class ModelConfig(BaseModel):
     name: str
     cost_input_token: float
     cost_output_token: float
+
+
+# Checks a valid temperature
+def valid_temperature(value: float) -> float:
+    if value < 0 or value > 2:
+        raise ValueError("No es una temperatura valida")
+    return value
 
 
 # Completion request /complete endpoint
