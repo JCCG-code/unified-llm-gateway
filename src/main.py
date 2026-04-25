@@ -15,6 +15,15 @@ app = FastAPI(title="Unified LLM Gateway")
 ollama_client = AsyncClient()
 
 
+# Helpers
+def build_messages(prompt: str, system_prompt: str | None) -> list[dict]:
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+    return messages
+
+
 @app.get("/health")
 async def health() -> CompletionResponse:
     return CompletionResponse(
@@ -25,6 +34,7 @@ async def health() -> CompletionResponse:
         input_tokens=10,
         output_tokens=10,
         cost_usd=1.1,
+        response_time_ms=203,
     )
 
 
@@ -32,37 +42,58 @@ async def health() -> CompletionResponse:
 async def complete(req: CompletionRequest) -> CompletionResponse:
     # Searchs and extracts requested model
     model = next(m for m in AVAILABLE_MODELS if req.model == m.name)
+    # Constructs an array of models to try
+    models_to_try = [model] + [m for m in AVAILABLE_MODELS if m.name != model.name]
     # Detects and builds array message
-    messages = []
-    if req.system_prompt:
-        messages.append({"role": "system", "content": req.system_prompt})
-    messages.append({"role": "user", "content": req.prompt})
-    # Model call
-    responseChat = await ollama_client.chat(model=model.name, messages=messages)
-    # Extract data
-    content = responseChat.message.content
-    input_tokens = responseChat.prompt_eval_count
-    output_tokens = responseChat.eval_count
-    # Checks values
-    if content is None or input_tokens is None or output_tokens is None:
-        raise HTTPException(status_code=500, detail="Error model response")
-    # Calc cost
-    cost = (
-        input_tokens * model.cost_input_token + output_tokens * model.cost_output_token
-    )
-    # Return statement
-    return CompletionResponse(
-        model=model,
-        content=content,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        cost_usd=cost,
-    )
+    messages = build_messages(req.prompt, req.system_prompt)
+    # Model call iteratively
+    for m in models_to_try:
+        try:
+            responseChat = await ollama_client.chat(model=m.name, messages=messages)
+            # Extract data
+            content = responseChat.message.content
+            input_tokens = responseChat.prompt_eval_count
+            output_tokens = responseChat.eval_count
+            total_duration = responseChat.total_duration
+            # Checks values
+            if (
+                content is None
+                or input_tokens is None
+                or output_tokens is None
+                or total_duration is None
+            ):
+                continue
+            # Calc cost
+            cost = (
+                input_tokens * m.cost_input_token + output_tokens * m.cost_output_token
+            )
+            # Calc response time in miliseconds
+            response_time_ms = total_duration // 1_000_000
+            # Return statement
+            return CompletionResponse(
+                model=m,
+                content=content,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost_usd=cost,
+                response_time_ms=response_time_ms,
+            )
+        except Exception:
+            continue
+    raise HTTPException(status_code=500, detail="No model available")
 
 
 @app.get("/models")
 async def models() -> list[ModelConfig]:
     return AVAILABLE_MODELS
+
+
+@app.get("/models/{name}")
+async def model_by_name(name: str) -> ModelConfig:
+    try:
+        return next(m for m in AVAILABLE_MODELS if name == m.name)
+    except StopIteration:
+        raise HTTPException(status_code=404, detail="Model not found")
 
 
 @app.post("/estimate-cost")
