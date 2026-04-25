@@ -1,7 +1,22 @@
 from fastapi import FastAPI
-from models import ModelConfig, CompletionRequest, CompletionResponse
+from models import ModelConfig, CompletionRequest, CompletionResponse, CostEstimate
+# from ollama import chat
+
 
 app = FastAPI(title="Unified LLM Gateway")
+
+# Constant variables
+AVAILABLE_MODELS = [
+    ModelConfig(name="llama3.2", cost_input_token=0.25, cost_output_token=0.5),
+    ModelConfig(name="gemma4-e4b", cost_input_token=0.25, cost_output_token=0.5),
+]
+
+
+# response = chat(
+#     model="llama3.2",
+#     messages=[{"role": "user", "content": "Hello!"}],
+# )
+# print(response.message.content)
 
 
 @app.get("/health")
@@ -31,4 +46,25 @@ async def complete(req: CompletionRequest) -> CompletionResponse:
         output_tokens=output_tokens,
         cost_usd=model.cost_input_token * input_tokens
         + model.cost_output_token * output_tokens,
+    )
+
+
+@app.get("/models")
+async def models() -> list[ModelConfig]:
+    return AVAILABLE_MODELS
+
+
+@app.post("/estimate-cost")
+async def estimate_cost(req: CompletionRequest) -> CostEstimate:
+    # Tokens count extract
+    promptCount = len(req.prompt)
+    tokensCount = int(promptCount / 4)
+    # Estimated cost
+    modelEl = next(m for m in AVAILABLE_MODELS if req.model == m.name)
+    usdCost = modelEl.cost_input_token * tokensCount
+    # Return statement
+    return CostEstimate(
+        estimated_input_tokens=tokensCount,
+        estimated_cost_usd=usdCost,
+        model=modelEl.name,
     )
