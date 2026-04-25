@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from models import ModelConfig, CompletionRequest, CompletionResponse, CostEstimate
 from ollama import AsyncClient
-
+from logger import log_request
 
 # Constant variables
 AVAILABLE_MODELS = [
@@ -16,7 +16,7 @@ ollama_client = AsyncClient()
 
 
 # Helpers
-def build_messages(prompt: str, system_prompt: str | None) -> list[dict]:
+def build_messages(prompt: str, system_prompt: str | None) -> list[dict[str, str]]:
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
@@ -40,6 +40,8 @@ async def health() -> CompletionResponse:
 
 @app.post("/complete")
 async def complete(req: CompletionRequest) -> CompletionResponse:
+    # Logger request
+    log_request(req)
     # Searchs and extracts requested model
     model = next(m for m in AVAILABLE_MODELS if req.model == m.name)
     # Constructs an array of models to try
@@ -69,8 +71,8 @@ async def complete(req: CompletionRequest) -> CompletionResponse:
             )
             # Calc response time in miliseconds
             response_time_ms = total_duration // 1_000_000
-            # Return statement
-            return CompletionResponse(
+            # Res statement
+            res = CompletionResponse(
                 model=m,
                 content=content,
                 input_tokens=input_tokens,
@@ -78,6 +80,9 @@ async def complete(req: CompletionRequest) -> CompletionResponse:
                 cost_usd=cost,
                 response_time_ms=response_time_ms,
             )
+            log_request(res)
+            # Return statement
+            return res
         except Exception:
             continue
     raise HTTPException(status_code=500, detail="No model available")
@@ -89,9 +94,27 @@ async def models() -> list[ModelConfig]:
 
 
 @app.get("/models/{name}")
-async def model_by_name(name: str) -> ModelConfig:
+async def get_model_by_name(name: str) -> ModelConfig:
     try:
         return next(m for m in AVAILABLE_MODELS if name == m.name)
+    except StopIteration:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+
+@app.post("/models", status_code=201)
+async def new_model(req: ModelConfig) -> ModelConfig:
+    model = next((m for m in AVAILABLE_MODELS if req.name == m.name), None)
+    if model:
+        raise HTTPException(status_code=409, detail="Model already exists")
+    AVAILABLE_MODELS.append(req)
+    return req
+
+
+@app.delete("/models/{name}", status_code=204)
+async def delete_model_by_name(name: str) -> None:
+    try:
+        model = next(m for m in AVAILABLE_MODELS if name == m.name)
+        AVAILABLE_MODELS.remove(model)
     except StopIteration:
         raise HTTPException(status_code=404, detail="Model not found")
 
@@ -102,11 +125,11 @@ async def estimate_cost(req: CompletionRequest) -> CostEstimate:
     prompt_count = len(req.prompt)
     tokens_count = prompt_count // 4
     # Estimated cost
-    modelEl = next(m for m in AVAILABLE_MODELS if req.model == m.name)
-    usdCost = modelEl.cost_input_token * tokens_count
+    model = next(m for m in AVAILABLE_MODELS if req.model == m.name)
+    usd_cost = model.cost_input_token * tokens_count
     # Return statement
     return CostEstimate(
         estimated_input_tokens=tokens_count,
-        estimated_cost_usd=usdCost,
-        model=modelEl.name,
+        estimated_cost_usd=usd_cost,
+        model=model.name,
     )
