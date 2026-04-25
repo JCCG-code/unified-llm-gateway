@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 
 # Model configuration interface
@@ -17,6 +17,7 @@ class CompletionRequest(BaseModel):
     max_tokens: int = Field(default=1000, ge=1, le=4096)
     temperature: float = Field(default=0.7, ge=0, le=2)
     stream: bool = False
+    system_prompt: Optional[str] = None
 
 
 # Completion response /complete endpoint
