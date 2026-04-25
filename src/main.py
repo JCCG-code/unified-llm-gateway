@@ -110,6 +110,15 @@ async def new_model(req: ModelConfig) -> ModelConfig:
     return req
 
 
+@app.put("/models/{name}")
+async def update_mode(name: str, req: ModelConfig) -> ModelConfig:
+    index = next((i for i, m in enumerate(AVAILABLE_MODELS) if name == m.name), None)
+    if index is None:
+        raise HTTPException(status_code=404, detail="Model not found")
+    AVAILABLE_MODELS[index] = req
+    return AVAILABLE_MODELS[index]
+
+
 @app.delete("/models/{name}", status_code=204)
 async def delete_model_by_name(name: str) -> None:
     try:
