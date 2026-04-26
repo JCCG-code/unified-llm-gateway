@@ -33,9 +33,11 @@ class CompletionResponse(BaseModel):
 
 # Cost estimated model
 class CostEstimate(BaseModel):
-    estimated_input_tokens: int
-    estimated_cost_usd: float
+    token_count: int
+    estimated_count: int
+    usd_cost: float
     model: str
+    estimation_error: float
 
 
 class TokenizeRequest(BaseModel):

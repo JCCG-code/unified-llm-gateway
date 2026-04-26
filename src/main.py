@@ -18,18 +18,25 @@ AVAILABLE_MODELS = [
 ]
 
 
-# Initializations
+# ---- Initializations --------------------------
 app = FastAPI(title="Unified LLM Gateway")
 ollama_client = AsyncClient()
 
 
-# Helpers
+# ---- Helpers ----------------------------------
 def build_messages(prompt: str, system_prompt: str | None) -> list[dict[str, str]]:
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
     return messages
+
+
+def tokenize_text(text: str, model: str = "gpt-4o") -> tuple[int, list[str]]:
+    enc = tiktoken.encoding_for_model(model)
+    token_ids = enc.encode(text)
+    decoded = [enc.decode_single_token_bytes(id).decode("utf-8") for id in token_ids]
+    return len(token_ids), decoded
 
 
 @app.get("/health")
@@ -138,29 +145,30 @@ async def delete_model_by_name(name: str) -> None:
 
 @app.post("/estimate-cost")
 async def estimate_cost(req: CompletionRequest) -> CostEstimate:
+    # Extract real tokens and decoded tokens
+    num_real_tokens, decoded_tokens = tokenize_text(req.prompt)
     # Tokens count extract
     prompt_count = len(req.prompt)
     tokens_count = prompt_count // 4
     # Estimated cost
     model = next(m for m in AVAILABLE_MODELS if req.model == m.name)
-    usd_cost = model.cost_input_token * tokens_count
+    usd_cost = model.cost_input_token * num_real_tokens
+    # Estimation error
+    estimation_error = abs(num_real_tokens - tokens_count) / num_real_tokens * 100
     # Return statement
     return CostEstimate(
-        estimated_input_tokens=tokens_count,
-        estimated_cost_usd=usd_cost,
-        model=model.name,
+        token_count=num_real_tokens,
+        estimated_count=tokens_count,
+        usd_cost=usd_cost,
+        model=req.model,
+        estimation_error=estimation_error,
     )
 
 
 @app.post("/tokenize")
 async def tokenize(req: TokenizeRequest) -> TokenizeResponse:
-    enc = tiktoken.encoding_for_model(req.model)
-    token_ids = enc.encode(req.text)
-    # Extract tokens by tiktoken
-    num_real_tokens = len(token_ids)
-    # Extract real strings
-    tokens = [enc.decode_single_token_bytes(id) for id in token_ids]
-    decoded_tokens = [t.decode("utf-8") for t in tokens]
+    # Extract real tokens and decoded tokens
+    num_real_tokens, decoded_tokens = tokenize_text(req.text, req.model)
     # Extract falsy token
     num_false_tokens = len(req.text) // 4
     # Estimation error
