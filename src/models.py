@@ -35,6 +35,7 @@ class CompletionResponse(BaseModel):
 class CostEstimate(BaseModel):
     token_count: int
     estimated_count: int
+    total_tokens: int
     usd_cost: float
     model: str
     estimation_error: float
@@ -51,3 +52,16 @@ class TokenizeResponse(BaseModel):
     tokens: list[str]
     estimated_count: int
     estimation_error: float
+
+
+class CompareRequest(BaseModel):
+    text: str
+
+
+class CompareResponse(BaseModel):
+    text: str
+    gpt4o_token_count: int
+    gpt4o_tokens: list[str]
+    gpt35_token_count: int
+    gpt35_tokens: list[str]
+    difference_percent: float

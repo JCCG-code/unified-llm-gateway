@@ -6,9 +6,11 @@ from models import (
     CostEstimate,
     TokenizeRequest,
     TokenizeResponse,
+    CompareRequest,
+    CompareResponse,
 )
 from ollama import AsyncClient
-from logger import log_request
+from logger import log_request, logger
 import tiktoken
 
 # Constant variables
@@ -33,10 +35,19 @@ def build_messages(prompt: str, system_prompt: str | None) -> list[dict[str, str
 
 
 def tokenize_text(text: str, model: str = "gpt-4o") -> tuple[int, list[str]]:
-    enc = tiktoken.encoding_for_model(model)
-    token_ids = enc.encode(text)
-    decoded = [enc.decode_single_token_bytes(id).decode("utf-8") for id in token_ids]
-    return len(token_ids), decoded
+    try:
+        enc = tiktoken.encoding_for_model(model)
+        token_ids = enc.encode(text)
+        decoded = [
+            enc.decode_single_token_bytes(id).decode("utf-8") for id in token_ids
+        ]
+        return len(token_ids), decoded
+    except KeyError:
+        estimated = len(text) // 4
+        logger.warning(
+            f"Model {model} not supported by tiktoken, using len//4 estimate"
+        )
+        return estimated, []
 
 
 @app.get("/health")
@@ -159,6 +170,7 @@ async def estimate_cost(req: CompletionRequest) -> CostEstimate:
     return CostEstimate(
         token_count=num_real_tokens,
         estimated_count=tokens_count,
+        total_tokens=num_real_tokens + req.max_tokens,
         usd_cost=usd_cost,
         model=req.model,
         estimation_error=estimation_error,
@@ -180,4 +192,23 @@ async def tokenize(req: TokenizeRequest) -> TokenizeResponse:
         tokens=decoded_tokens,
         estimated_count=num_false_tokens,
         estimation_error=estimation_error,
+    )
+
+
+@app.post("/compare")
+async def compare(req: CompareRequest) -> CompareResponse:
+    # Token extraction
+    num_4o_tokens, decoded_4o_tokens = tokenize_text(req.text, "gpt-4o")
+    num_35turbo_tokens, decoded_35turbo_tokens = tokenize_text(
+        req.text, "gpt-3.5-turbo"
+    )
+    # Study difference
+    tokens_diff = abs(num_4o_tokens - num_35turbo_tokens) / num_4o_tokens * 100
+    return CompareResponse(
+        text=req.text,
+        gpt4o_token_count=num_4o_tokens,
+        gpt4o_tokens=decoded_4o_tokens,
+        gpt35_token_count=num_35turbo_tokens,
+        gpt35_tokens=decoded_35turbo_tokens,
+        difference_percent=tokens_diff,
     )
