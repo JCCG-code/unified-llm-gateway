@@ -1,7 +1,15 @@
 from fastapi import FastAPI, HTTPException
-from models import ModelConfig, CompletionRequest, CompletionResponse, CostEstimate
+from models import (
+    ModelConfig,
+    CompletionRequest,
+    CompletionResponse,
+    CostEstimate,
+    TokenizeRequest,
+    TokenizeResponse,
+)
 from ollama import AsyncClient
 from logger import log_request
+import tiktoken
 
 # Constant variables
 AVAILABLE_MODELS = [
@@ -141,4 +149,27 @@ async def estimate_cost(req: CompletionRequest) -> CostEstimate:
         estimated_input_tokens=tokens_count,
         estimated_cost_usd=usd_cost,
         model=model.name,
+    )
+
+
+@app.post("/tokenize")
+async def tokenize(req: TokenizeRequest) -> TokenizeResponse:
+    enc = tiktoken.encoding_for_model(req.model)
+    token_ids = enc.encode(req.text)
+    # Extract tokens by tiktoken
+    num_real_tokens = len(token_ids)
+    # Extract real strings
+    tokens = [enc.decode_single_token_bytes(id) for id in token_ids]
+    decoded_tokens = [t.decode("utf-8") for t in tokens]
+    # Extract falsy token
+    num_false_tokens = len(req.text) // 4
+    # Estimation error
+    estimation_error = abs(num_real_tokens - num_false_tokens) / num_real_tokens * 100
+    # Return statement
+    return TokenizeResponse(
+        text=req.text,
+        token_count=num_real_tokens,
+        tokens=decoded_tokens,
+        estimated_count=num_false_tokens,
+        estimation_error=estimation_error,
     )

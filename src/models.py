@@ -36,3 +36,16 @@ class CostEstimate(BaseModel):
     estimated_input_tokens: int
     estimated_cost_usd: float
     model: str
+
+
+class TokenizeRequest(BaseModel):
+    text: str
+    model: str = "gpt-4o"
+
+
+class TokenizeResponse(BaseModel):
+    text: str
+    token_count: int
+    tokens: list[str]
+    estimated_count: int
+    estimation_error: float
