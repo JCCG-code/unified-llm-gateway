@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from models import (
+from src.models import (
     ModelConfig,
     CompletionRequest,
     CompletionResponse,
@@ -8,10 +8,13 @@ from models import (
     TokenizeResponse,
     CompareRequest,
     CompareResponse,
+    BatchRequest,
+    BatchResponse,
 )
 from ollama import AsyncClient
-from logger import log_request, logger
+from src.logger import log_request, logger
 import tiktoken
+import asyncio
 
 # Constant variables
 AVAILABLE_MODELS = [
@@ -112,6 +115,26 @@ async def complete(req: CompletionRequest) -> CompletionResponse:
         except Exception:
             continue
     raise HTTPException(status_code=500, detail="No model available")
+
+
+@app.post("/complete/batch")
+async def complete_batch(req: BatchRequest) -> BatchResponse:
+    # Creates CompletionRequest models
+    requests = [
+        CompletionRequest(
+            prompt=prompt, model=req.model, system_prompt=req.system_prompt
+        )
+        for prompt in req.prompts
+    ]
+    # Launches in pararell
+    results = await asyncio.gather(*[complete(request) for request in requests])
+    # Calc totals
+    total_cost = sum(result.cost_usd for result in results)
+    total_time = max(result.response_time_ms for result in results)
+    # Return statement
+    return BatchResponse(
+        results=results, total_cost_usd=total_cost, total_time_ms=total_time
+    )
 
 
 @app.get("/models")

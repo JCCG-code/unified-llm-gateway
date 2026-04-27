@@ -65,3 +65,16 @@ class CompareResponse(BaseModel):
     gpt35_token_count: int
     gpt35_tokens: list[str]
     difference_percent: float
+
+
+# ---- Asyncio calls --------------------------------
+class BatchRequest(BaseModel):
+    prompts: list[str] = Field(min_length=1)
+    model: str = Field(default="llama3.2")
+    system_prompt: Optional[str] = None
+
+
+class BatchResponse(BaseModel):
+    results: list[CompletionResponse]
+    total_cost_usd: float
+    total_time_ms: int

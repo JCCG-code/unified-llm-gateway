@@ -1,5 +1,5 @@
 import logging
-from models import CompletionRequest, CompletionResponse
+from src.models import CompletionRequest, CompletionResponse
 
 # Initializations
 logger = logging.getLogger("gateway")
