@@ -53,6 +53,7 @@ def tokenize_text(text: str, model: str = "gpt-4o") -> tuple[int, list[str]]:
         return estimated, []
 
 
+# ---- Endpoints ----------------------------------
 @app.get("/health")
 async def health() -> CompletionResponse:
     return CompletionResponse(
