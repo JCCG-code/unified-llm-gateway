@@ -73,7 +73,9 @@ async def complete(req: CompletionRequest) -> CompletionResponse:
     # Logger request
     log_request(req)
     # Searchs and extracts requested model
-    model = next(m for m in AVAILABLE_MODELS if req.model == m.name)
+    model = next((m for m in AVAILABLE_MODELS if req.model == m.name), None)
+    if model is None:
+        raise HTTPException(status_code=404, detail="Model not found")
     # Constructs an array of models to try
     models_to_try = [model] + [m for m in AVAILABLE_MODELS if m.name != model.name]
     # Detects and builds array message
